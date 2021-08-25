@@ -12,4 +12,4 @@ RUN pip install --upgrade pip
 EXPOSE 5000
 COPY . .
 RUN export FLASK_APP=pneumonia_detection
-CMD [ "python", "./app.py" ]
+CMD [ "python", "./app/app.py" ]
