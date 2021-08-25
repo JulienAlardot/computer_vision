@@ -9,5 +9,4 @@ RUN pip install --upgrade pip
 EXPOSE 5000
 COPY . .
 RUN export FLASK_APP=pneumonia_detection
-#RUN flask run
 CMD [ "python", "test.py" ]
