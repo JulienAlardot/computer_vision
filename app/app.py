@@ -3,6 +3,8 @@ import os
 import cv2
 import torch
 from flask import Flask, request, flash, redirect, url_for
+import numpy as np
+from torch import nn
 from werkzeug.utils import secure_filename
 
 # from app import PneumoniaModel, preprocess
@@ -15,10 +17,6 @@ ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-import cv2
-from numpy import np
-from scipy import ndimage
-from torch import nn
 
 
 def preprocess(x, resize=128):
@@ -32,11 +30,9 @@ def preprocess(x, resize=128):
     x = x.reshape(resize, resize, 1)
     return x
 
-
 class PneumoniaModel(nn.Module):
-    def __init__(self, input_shape, dropout=0.1):
+    def __init__(self, input_shape, dropout=0.1, n_filters=32):
         super(PneumoniaModel, self).__init__()
-        n_filters = 2
         self.conv1 = nn.Conv2d(1, n_filters, 3, 1)
         self.pool1 = nn.MaxPool2d((3, 3), stride=1)
         self.dropout1 = nn.Dropout(dropout)
@@ -110,20 +106,29 @@ def upload_file():
     '''
 
 
-@app.route('/', methods=['GET'])
-def uploaded_file(filename):
-    model = PneumoniaModel((128, 128)).cuda()
-    model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER), "pneumodia_model.pt"))
-    img_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    img = [preprocess(cv2.imread([img_path]))]
-    img = torch.tensor(img).float().cuda()
+@app.route('/results', methods=['GET'])
+def uploaded_file():
+    model = PneumoniaModel((128, 128))
+    if torch.cuda.is_available():
+        model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt")))
+        img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args['<filename>'])
+        img = [preprocess(cv2.imread([img_path]))]
+        img = torch.tensor(img).cuda().float()
+    else:
+        model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt"),
+                              map_location=torch.device('cpu')))
+        img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args['<filename>'])
+        img = [preprocess(cv2.imread([img_path]))]
+        img = torch.tensor(img).cuda().float()
+
     pred = model.forward(img)
+
     labels = ("Normal", "Pneumonia")
     idx = pred.argmax(1)
     return f'''
     <title>Chest X-Ray Pneumodia</title>
     <h1>Chest X-Ray is predicted to be : {labels[idx]} with a {pred[idx]:>5.2%} confidence level</h1>
-    <img class="xraychest"
+     <img class="xraychest"
      src="{img_path}"
      alt="Chest X-Ray maybe presenting signs of pneumonia">
     '''
