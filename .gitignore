@@ -140,3 +140,4 @@ cython_debug/
 # Dataset Folder
 data/
 !.gitkeep
+/clean_images.cmd

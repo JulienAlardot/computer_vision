@@ -1,22 +1,22 @@
 import os
 
 import cv2
-import torch
-from flask import Flask, request, flash, redirect, url_for
 import numpy as np
+import torch
+from flask import Flask, request, flash, redirect, url_for, render_template
 from torch import nn
 from werkzeug.utils import secure_filename
 
 # from app import PneumoniaModel, preprocess
 
-ROOT_FOLDER = os.path.dirname(os.path.dirname(__file__))
+ROOT_FOLDER = os.path.dirname(__file__)
 
-UPLOAD_FOLDER = os.path.join(ROOT_FOLDER, "uploads")
-ML_CORE_FOLDER = os.path.join(ROOT_FOLDER, "ml_core")
+UPLOAD_FOLDER = os.path.join(ROOT_FOLDER, "static/uploads")
+ML_CORE_FOLDER = os.path.join(os.path.dirname(ROOT_FOLDER), "ml_core")
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER'] = "static/uploads"
 
 
 def preprocess(x, resize=128):
@@ -28,19 +28,21 @@ def preprocess(x, resize=128):
     x = (x - x.mean()).astype(np.float64)
     x = (x / x.max()).astype(np.float64)
     x = x.reshape(resize, resize, 1)
+    x = np.moveaxis(x, -1, 0)
     return x
 
+
 class PneumoniaModel(nn.Module):
-    def __init__(self, input_shape, dropout=0.1, n_filters=32):
+    def __init__(self, input_shape, dropout=0.1, n_filters=16):
         super(PneumoniaModel, self).__init__()
         self.conv1 = nn.Conv2d(1, n_filters, 3, 1)
         self.pool1 = nn.MaxPool2d((3, 3), stride=1)
         self.dropout1 = nn.Dropout(dropout)
-        self.conv2 = nn.Conv2d(n_filters, n_filters, (3, 3), 1)
+        self.conv2 = nn.Conv2d(n_filters, n_filters // 2, (3, 3), 1)
         self.pool2 = nn.MaxPool2d((3, 3), stride=1)
         self.dropout2 = nn.Dropout(dropout)
         self.flatten = nn.Flatten()
-        self.linear1 = nn.Linear(n_filters * (input_shape[0] - 8) * (input_shape[1] - 8), 32 * 32)
+        self.linear1 = nn.Linear(n_filters // 2 * (input_shape[0] - 8) * (input_shape[1] - 8), 32 * 32)
         self.activation1 = nn.LeakyReLU()
         self.dropout3 = nn.Dropout(dropout)
         self.linear2 = nn.Linear(32 * 32, 32 * 32)
@@ -109,35 +111,28 @@ def upload_file():
 @app.route('/results', methods=['GET'])
 def uploaded_file():
     global model
+    img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args.get('filename'))
+    img = [preprocess(cv2.imread(img_path))]
     if torch.cuda.is_available():
-        img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args['<filename>'])
-        img = [preprocess(cv2.imread([img_path]))]
         img = torch.tensor(img).cuda().float()
     else:
-        model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt"),
-                              map_location=torch.device('cpu')))
-        img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args['<filename>'])
-        img = [preprocess(cv2.imread([img_path]))]
         img = torch.tensor(img).float()
 
     pred = model.forward(img)
 
     labels = ("Normal", "Pneumonia")
-    idx = pred.argmax(1)
-    return f'''
-    <title>Chest X-Ray Pneumodia</title>
-    <h1>Chest X-Ray is predicted to be : {labels[idx]} with a {pred[idx]:>5.2%} confidence level</h1>
-     <img class="xraychest"
-     src="{img_path}"
-     alt="Chest X-Ray maybe presenting signs of pneumonia">
-    '''
+    idx = int(pred.argmax(1))
+    user = dict(class_name=f"{labels[idx]}".lower(),
+                confidence=f"{float(pred.max()):>5.2%}",
+                img_path=img_path)
+    return render_template("results.html", user=user)
 
 
 if __name__ == '__main__':
-    model = PneumoniaModel((128, 128), 0.1,16)
+    model = PneumoniaModel((128, 128), 0.4, 16)
     if torch.cuda.is_available():
         model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt")))
     else:
         model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt"),
-                              map_location=torch.device('cpu')))
+                                         map_location=torch.device('cpu')))
     app.run(debug=True, host="0.0.0.0")
