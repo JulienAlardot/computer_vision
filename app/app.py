@@ -108,9 +108,8 @@ def upload_file():
 
 @app.route('/results', methods=['GET'])
 def uploaded_file():
-    model = PneumoniaModel((128, 128))
+    global model
     if torch.cuda.is_available():
-        model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt")))
         img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args['<filename>'])
         img = [preprocess(cv2.imread([img_path]))]
         img = torch.tensor(img).cuda().float()
@@ -119,7 +118,7 @@ def uploaded_file():
                               map_location=torch.device('cpu')))
         img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args['<filename>'])
         img = [preprocess(cv2.imread([img_path]))]
-        img = torch.tensor(img).cuda().float()
+        img = torch.tensor(img).float()
 
     pred = model.forward(img)
 
@@ -135,4 +134,10 @@ def uploaded_file():
 
 
 if __name__ == '__main__':
+    model = PneumoniaModel((128, 128), 0.1,16)
+    if torch.cuda.is_available():
+        model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt")))
+    else:
+        model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt"),
+                              map_location=torch.device('cpu')))
     app.run(debug=True, host="0.0.0.0")
