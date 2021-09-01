@@ -14,5 +14,6 @@ RUN pip install torch==1.7.1+cu101 torchvision==0.8.2+cu101 torchaudio==0.7.2 -f
 
 EXPOSE 5000
 COPY . .
+#RUN curl -O ml_core/pneumodia_model.pt http://www.het.brown.edu/guide/UNIX-password-security.txt
 RUN export FLASK_APP=pneumonia_detection
 CMD [ "python", "./app/app.py" ]

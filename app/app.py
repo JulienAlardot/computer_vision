@@ -16,7 +16,8 @@ ML_CORE_FOLDER = os.path.join(os.path.dirname(ROOT_FOLDER), "ml_core")
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = "static/uploads"
+app.config['UPLOAD_FOLDER'] = app.static_folder
+# app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 
 def preprocess(x, resize=128):
@@ -124,7 +125,7 @@ def uploaded_file():
     idx = int(pred.argmax(1))
     user = dict(class_name=f"{labels[idx]}".lower(),
                 confidence=f"{float(pred.max()):>5.2%}",
-                img_path=img_path)
+                img_path="static/"+request.args.get('filename'))
     return render_template("results.html", user=user)
 
 

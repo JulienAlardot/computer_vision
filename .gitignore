@@ -141,3 +141,4 @@ cython_debug/
 data/
 !.gitkeep
 /clean_images.cmd
+/ml_core/pneumodia_model.pt
