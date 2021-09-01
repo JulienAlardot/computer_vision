@@ -22,14 +22,15 @@ app.config['UPLOAD_FOLDER'] = app.static_folder
 
 def preprocess(x, resize=128):
     x = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY)
-    x = cv2.resize(x, (resize * 2, resize * 2))
+
+    x = cv2.resize(x, (256, 256))
     x = cv2.GaussianBlur(x, (5, 5), 1, 1)
     x = cv2.resize(x, (resize, resize))
     x = x - (cv2.GaussianBlur(x, (7, 7), 1, 1) * 0.8)
     x = (x - x.mean()).astype(np.float64)
     x = (x / x.max()).astype(np.float64)
     x = x.reshape(resize, resize, 1)
-    x = np.moveaxis(x, -1, 0)
+    x = np.moveaxis(x, -1, 0).reshape((1,1,128,128))
     return x
 
 
@@ -113,16 +114,17 @@ def upload_file():
 def uploaded_file():
     global model
     img_path = os.path.join(app.config["UPLOAD_FOLDER"], request.args.get('filename'))
-    img = [preprocess(cv2.imread(img_path))]
+    img = preprocess(cv2.imread(img_path))
+    print(img, img.shape)
     if torch.cuda.is_available():
         img = torch.tensor(img).cuda().float()
     else:
         img = torch.tensor(img).float()
-
-    pred = model.forward(img)
-
+    with torch.no_grad():
+        pred = model(img)[0]
+    print(pred, pred.shape)
     labels = ("Normal", "Pneumonia")
-    idx = int(pred.argmax(1))
+    idx = int(pred.argmax())
     user = dict(class_name=f"{labels[idx]}".lower(),
                 confidence=f"{float(pred.max()):>5.2%}",
                 img_path="static/"+request.args.get('filename'))
@@ -136,4 +138,5 @@ if __name__ == '__main__':
     else:
         model.load_state_dict(torch.load(os.path.join(ML_CORE_FOLDER, "pneumodia_model.pt"),
                                          map_location=torch.device('cpu')))
+    model.eval()
     app.run(debug=True, host="0.0.0.0")
